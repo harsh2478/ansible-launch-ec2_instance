@@ -1,0 +1,66 @@
+- name: "Ansible test"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: yes
+  vars:
+    access_key: "AKIA4ZY4HU27RCUCR3VE"
+    secret_key: "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"
+    vars_files:
+      - "/root/ansible_playbook/aws_var.yml"
+  tasks:
+    #  block: Blocks allow for logical grouping of tasks and in play error handling. 
+   
+    - name: "creating key pair in aws"
+      amazon.aws.ec2_key:
+        name: "my_key"
+        key_material: "{{ lookup('file', '/root/.ssh/my_key.pub') }}"
+        region: "ap-south-1"
+        state: present
+        aws_secret_key: "{{secret_key}}"
+        aws_access_key: "{{access_key}}"
+
+    - name: "Create security group"
+      amazon.aws.ec2_security_group:
+        name: "sg_ansible_testing"
+        description: "Security group"
+        region: "ap-south-1"
+        aws_access_key: "{{access_key}}"  
+        aws_secret_key: "{{secret_key}}"  
+        rules:                                
+          - proto: tcp
+            ports:
+              - 22
+              - 80
+            cidr_ip: 0.0.0.0/0
+            rule_desc: "allow everyone on http and ssh port"
+
+
+    - name: "launching aws ec2 instance"
+      amazon.aws.ec2_instance:
+        aws_access_key: "{{access_key}}"
+        aws_secret_key: "{{secret_key}}"
+        region: "ap-south-1"
+        key_name: "my_key"
+        image_id: "ami-0645cf88151eb2007"
+        instance_type: "t2.micro"
+        tags:
+           environment: "testing"
+             #vpc_subnet_id: default
+        security_group: "sg_ansible_testing"
+        network:
+          assign_public_ip: true
+        count: 2
+        wait_timeout: 300
+      register: info
+      ignore_errors: true
+        
+   # Ansible tags label tasks, blocks, or plays in playbooks, enabling the selective execution or skipping of specific task
+    
+    - name: "add instance to host"
+      lineinfile:
+        path: /etc/ansible/hosts
+        line: "{{ info.instances[0].public_ip }}"
+
+        
+
